@@ -1,0 +1,257 @@
+<!--
+
+THIS IS THE PRESENTATION OF MY BRAND NEW GAME
+
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>STATING GAME 2026</title>
+    <style>
+        :root { 
+            --blue: #007AFF; 
+            --red: #FF3B30; 
+            --neutral: #8e8e93; 
+        }
+        body, html { 
+            margin: 0; 
+            padding: 0; 
+            width: 100%; 
+            height: 100%; 
+            background: #f2f2f7; 
+            overflow: hidden; 
+            font-family: -apple-system, sans-serif; 
+        }
+        #game-container { 
+            width: 100vw; 
+            height: 100vh; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            filter: blur(12px); 
+            pointer-events: none; 
+            will-change: transform;
+        }
+        #world { 
+            position: relative; 
+            width: 0; 
+            height: 0; 
+            will-change: transform;
+        }
+        .planet { 
+            position: absolute; 
+            width: 50px; 
+            height: 50px; 
+            border-radius: 50%; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-weight: 800; 
+            transform: translate(-50%, -50%); 
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1); 
+            border: 2px solid rgba(255,255,255,0.7); 
+            font-size: 12px; 
+            z-index: 10;
+            backface-visibility: hidden;
+        }
+        .player { background: var(--blue); color: white; }
+        .enemy { background: var(--red); color: white; }
+        .neutral { background: white; color: var(--neutral); }
+        .unit { 
+            position: absolute; 
+            border-radius: 50%; 
+            transform: translate(-50%, -50%); 
+            z-index: 5; 
+            transition: left 0.6s cubic-bezier(0.2, 0, 0.4, 1), top 0.6s cubic-bezier(0.2, 0, 0.4, 1); 
+            opacity: 0.8;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            pointer-events: none;
+            will-change: left, top;
+        }
+        .dev-overlay { 
+            position: fixed; 
+            inset: 0; 
+            z-index: 999; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            background: rgba(255,255,255,0.1); 
+            text-align: center; 
+            color: #1c1c1e; 
+            pointer-events: none; 
+        }
+        .dev-content { 
+            pointer-events: auto; 
+            animation: fadeInPage 1.5s ease-out forwards;
+            opacity: 0;
+        }
+        @keyframes fadeInPage {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .main-title { 
+            font-size: 28px; 
+            font-weight: 900; 
+            letter-spacing: -1px; 
+            margin-bottom: 2px;
+            animation: pulseText 2s ease-in-out infinite;
+        }
+        @keyframes pulseText {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(0.98); }
+        }
+        .sub-title { font-size: 12px; font-weight: 500; opacity: 0.7; transition: opacity 0.3s; }
+        .sub-title:hover { opacity: 1; }
+        .sub-title a { color: inherit; text-decoration: none; border-bottom: 1px solid rgba(0,0,0,0.2); }
+    </style>
+</head>
+<body>
+    <div class="dev-overlay">
+        <div class="dev-content">
+            <div class="main-title">STATING GAME. IN DEVELOPMENT.</div>
+            <div class="sub-title">By <a href="https://perlch.github.io/perlit"><b>perlch</b></a></div>
+        </div>
+    </div>
+    <div id="game-container">
+        <div id="world"></div>
+    </div>
+    <script>
+        const size = 4;
+        const UNIT_SIZE = 8;
+        const world = document.getElementById('world');
+        let planets = [];
+        let firstMoves = 0;
+        let lastTick = 0;
+        let lastAI = 0;
+        
+        function initMap() {
+            world.innerHTML = '';
+            planets = [];
+            firstMoves = 0;
+            const step = 110; 
+            const centerOffset = ((size - 1) * step) / 2;
+            for(let i=0; i<size; i++) {
+                for(let j=0; j<size; j++) {
+                    const x = i * step - centerOffset;
+                    const y = j * step - centerOffset;
+                    createPlanet(x, y);
+                }
+            }
+            planets[0].owner = 'player';
+            planets[0].el.className = 'planet player';
+            planets[0].count = 100;
+            planets[size*size-1].owner = 'enemy';
+            planets[size*size-1].el.className = 'planet enemy';
+            planets[size*size-1].count = 100;
+            updateScale();
+        }
+
+        function createPlanet(x, y) {
+            const el = document.createElement('div');
+            el.className = 'planet neutral';
+            el.style.left = x + 'px';
+            el.style.top = y + 'px';
+            world.appendChild(el);
+            planets.push({ id: planets.length, x, y, count: 15, lastDisplayedCount: -1, owner: 'neutral', el });
+        }
+
+        function send(f, t, side) {
+            let n = Math.floor(f.count / 1.5);
+            if (n < 1) return;
+            f.count -= n;
+            for(let i=0; i<n; i++) {
+                setTimeout(() => {
+                    const u = document.createElement('div');
+                    u.className = 'unit';
+                    u.style.width = UNIT_SIZE + 'px';
+                    u.style.height = UNIT_SIZE + 'px';
+                    u.style.left = f.x + 'px';
+                    u.style.top = f.y + 'px';
+                    u.style.background = side === 'player' ? 'var(--blue)' : 'var(--red)';
+                    world.appendChild(u);
+                    
+                    u.getBoundingClientRect(); 
+                    u.style.left = t.x + 'px';
+                    u.style.top = t.y + 'px';
+
+                    setTimeout(() => { 
+                        arrive(t, side); 
+                        u.remove(); 
+                    }, 600); 
+                }, i * 40); 
+            }
+        }
+
+        function arrive(p, side) {
+            if(p.owner === side) p.count += 1;
+            else {
+                p.count -= 1.5;
+                if(p.count <= 0) {
+                    p.owner = side;
+                    p.count = 10;
+                    p.el.className = 'planet ' + side;
+                }
+            }
+        }
+
+        function gameLoop(time) {
+            if (time - lastTick > 100) {
+                planets.forEach(p => {
+                    if(p.owner !== 'neutral') p.count += 1.2;
+                    const displayVal = Math.floor(p.count);
+                    if (p.lastDisplayedCount !== displayVal) {
+                        p.el.innerText = displayVal;
+                        p.lastDisplayedCount = displayVal;
+                    }
+                });
+                lastTick = time;
+                
+                const activeOwners = [...new Set(planets.filter(p => p.owner !== 'neutral').map(p => p.owner))];
+                if(activeOwners.length < 2 && planets.every(p => p.owner !== 'neutral')) {
+                    setTimeout(initMap, 1500);
+                }
+            }
+
+            if (time - lastAI > 500) {
+                runAI();
+                lastAI = time;
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function runAI() {
+            ['player', 'enemy'].forEach(side => {
+                let limit = firstMoves < 2 ? 5 : 20;
+                const mine = planets.filter(p => p.owner === side && p.count > limit);
+                mine.forEach(s => {
+                    let chance = firstMoves < 2 ? 1 : 0.4;
+                    if (Math.random() < chance) { 
+                        const targets = planets.filter(p => p.owner !== side)
+                            .sort((a,b) => Math.hypot(a.x-s.x, a.y-s.y) - Math.hypot(b.x-s.x, b.y-s.y));
+                        if(targets[0]) {
+                            send(s, targets[0], side);
+                            firstMoves++;
+                        }
+                    }
+                });
+            });
+        }
+
+        function updateScale() {
+            const baseScale = Math.min(window.innerWidth / 750, window.innerHeight / 750);
+            world.style.transform = `scale(${baseScale * 2})`;
+        }
+
+        window.addEventListener('load', () => {
+            initMap();
+            requestAnimationFrame(gameLoop);
+            window.addEventListener('resize', updateScale);
+        });
+    </script>
+</body>
+  </html>
+  
